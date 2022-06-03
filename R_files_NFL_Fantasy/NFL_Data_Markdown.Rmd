@@ -1,0 +1,822 @@
+---
+title: "NFL_Data_Markdown"
+author: "Joseph Samuel"
+date: "9/30/2021"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=TRUE, cache=FALSE,echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE, include=FALSE}
+library(dplyr)
+library(tidyverse)
+library(readr)
+library(ggplot2)
+Standard_cleaned_joined_2 <- read_csv("C:/MyJoseph/Certification/Data Analyst/Projects/Standard_cleaned_joined_2.csv") 
+PPR_cleaned_joined_2 <- read_csv("C:/MyJoseph/Certification/Data Analyst/Projects/PPR_cleaned_joined_2.csv")
+
+Standard<- Standard_cleaned_joined_2 
+Standard_fullClean <- distinct(Standard,Player_Id, Year, .keep_all = TRUE)
+
+PPR<- PPR_cleaned_joined_2
+PPR_fullClean<- distinct(PPR,Player_Id, Year, .keep_all = TRUE)
+
+
+```
+
+
+# Question
+
+In fantasy-football the most important picks are in the early rounds and the decision on whether to draft a top tier Running Back or Receiver with your early round draft picks. The analysis is done for both PPR scoring leagues(+1 point for every reception) and standard scoring leagues.
+
+
+
+# Cleaning and Processing Data
+
+The tables ActivePlayer_Rushing_Stats and ActivePlayer_Receiving_Stats were initially downloaded from Kaggle (link: https://www.kaggle.com/trevyoungquist/2020-nfl-stats-active-and-retired-players).
+
+
+
+The data initially looked like this:
+
+NFL_Fantasy_Rushing:
+
+*  https://drive.google.com/file/d/1Ofe-dheIjS_G87KbPUYxcyfrbsuRhlhT/view?usp=sharing
+
+NFL_Fantasy_Reciving:
+
+*  https://drive.google.com/file/d/1FyM86Qo7rJcUFKMO0a6nrbYfLs0x0EHc/view?usp=sharing
+
+<br/>
+
+After downloading the data I moved it to spreadsheets where I removed any duplicates, trimmed whitespaces, 
+analyzed the data for any outlandish data points, removed the irrelevant data, and added the columns that would relate to my data analysis (ex: Fantasy_Rushing_points or Fantasy_Standard_Reciving_Total).
+
+
+Link to Spreadsheets:
+
+* https://docs.google.com/spreadsheets/d/1Mm8hreJhZO6MvhHdWcmCHCb93yO1ciWEDD_lhstt5YU/edit?usp=sharing
+
+* https://docs.google.com/spreadsheets/d/12YL4nngxISPMLOauAyrDjuGfIkVD1BWr5eEpC7N24IQ/edit?usp=sharing
+
+<br/>
+
+After using cleaning and transforming the data on spreadsheets I imported the cleaned/transformed data sets into SQL(Big Query). In SQL I joined the NFL_Fantasy_Rushing table with the NFL_Fantasy_Reciving. This was because there were many stats that crossed positions. For example a running back(rb) will have receiving yards and a receiver(wr) can have rushing yards, so by combining the two tables I will be able to get the info for how many total yard rushing and receiving a player has. In SQL(Big Query) I also added new columns like Total_PPR and Total_Standard which used data from both NFL_Fantasy_Reciving and NFL_Fantasy_Rushing. I also renamed some of the other columns and changed many of the nulls to 0's. I used 2 queries so i would have 2 data sets one for STandard Scoring and one for PPR scoring.
+
+### Code used in Big Query : 
+
+#### Standard Scoring data set: 
+<br/>
+
+SELECT
+
+&nbsp;&nbsp;&nbsp;&nbsp;  Recieve.Player_Id,  
+&nbsp;&nbsp;&nbsp;&nbsp;  Recieve.Year,  
+&nbsp;&nbsp;&nbsp;&nbsp;  ifnull(Rush.Fumbles,  
+&nbsp;&nbsp;&nbsp;&nbsp;  0) AS Fumbles,
+&nbsp;&nbsp;&nbsp;&nbsp;  Rush.Yards AS Rushing_Yards,  
+&nbsp;&nbsp;&nbsp;&nbsp;  Recieve.Yards AS Receiving_Yards,  
+&nbsp;&nbsp;&nbsp;&nbsp;  Rush.TDs AS Rushing_TD,  
+&nbsp;&nbsp;&nbsp;&nbsp;  Recieve.Receptions,  
+&nbsp;&nbsp;&nbsp;&nbsp;  Recieve.TDs AS Recieving_TD,  
+&nbsp;&nbsp;&nbsp;&nbsp;  Fantasy_Reception_Points,  
+&nbsp;&nbsp;&nbsp;&nbsp;  Fantasy_Rushing_Points,  
+&nbsp;&nbsp;&nbsp;&nbsp;  Fantasy_Standard_Reciving_Total AS Fantasy_Standard_Reciving_Points,  
+&nbsp;&nbsp;&nbsp;&nbsp;  ifnull((Fantasy_Reception_Points+ Fantasy_Rushing_Points + Fantasy_Standard_Reciving_Total)- Rush.Fumbles, 
+    0)AS Total_PPR,  
+&nbsp;&nbsp;&nbsp;&nbsp;  ifnull((Fantasy_Rushing_Points + Fantasy_Standard_Reciving_Total)-Rush.Fumbles,
+    0) AS Total_Standard  
+    
+FROM
+
+  &nbsp;&nbsp;&nbsp;&nbsp;`nfl-data-analysis-326404.NFL_Stats_Fantasy.Rushing` AS Rush  
+  
+FULL OUTER JOIN
+
+&nbsp;&nbsp;&nbsp;&nbsp;  `nfl-data-analysis-326404.NFL_Stats_Fantasy.Recieving` AS Recieve  
+  
+ON
+
+&nbsp;&nbsp;&nbsp;&nbsp;  Rush.Player_Id= Recieve.Player_Id  
+  
+WHERE  
+
+ &nbsp;&nbsp;&nbsp;&nbsp; Fantasy_Rushing_Points>0 
+  AND Fantasy_Standard_Reciving_Total>0  
+  
+ORDER BY
+
+  &nbsp;&nbsp;&nbsp;&nbsp;Total_Standard DESC  
+  
+  <br/>
+  <br/>
+  
+#### PPR Scoring data set:   
+
+<br/>
+
+SELECT
+
+&nbsp;&nbsp;&nbsp;&nbsp;  Recieve.Player_Id,  
+&nbsp;&nbsp;&nbsp;&nbsp;  Recieve.Year,  
+&nbsp;&nbsp;&nbsp;&nbsp;  ifnull(Rush.Fumbles,  
+&nbsp;&nbsp;&nbsp;&nbsp;  0) AS Fumbles,
+&nbsp;&nbsp;&nbsp;&nbsp;  Rush.Yards AS Rushing_Yards,  
+&nbsp;&nbsp;&nbsp;&nbsp;  Recieve.Yards AS Receiving_Yards,  
+&nbsp;&nbsp;&nbsp;&nbsp;  Rush.TDs AS Rushing_TD,  
+&nbsp;&nbsp;&nbsp;&nbsp;  Recieve.Receptions,  
+&nbsp;&nbsp;&nbsp;&nbsp;  Recieve.TDs AS Recieving_TD,  
+&nbsp;&nbsp;&nbsp;&nbsp;  Fantasy_Reception_Points,  
+&nbsp;&nbsp;&nbsp;&nbsp;  Fantasy_Rushing_Points,    
+&nbsp;&nbsp;&nbsp;&nbsp;  Fantasy_Standard_Reciving_Total AS Fantasy_Standard_Reciving_Points,  
+&nbsp;&nbsp;&nbsp;&nbsp;  ifnull((Fantasy_Rushing_Points + Fantasy_Standard_Reciving_Total)-2*Rush.Fumbles,
+    0) AS Total_Standard,  
+&nbsp;&nbsp;&nbsp;&nbsp;  ifnull((Fantasy_Reception_Points+ Fantasy_Rushing_Points + Fantasy_Standard_Reciving_Total)- 2*Rush.Fumbles,
+    0) AS Total_PPR
+ 
+    
+FROM
+
+  &nbsp;&nbsp;&nbsp;&nbsp;`nfl-data-analysis-326404.NFL_Stats_Fantasy.Rushing` AS Rush  
+  
+FULL OUTER JOIN
+
+&nbsp;&nbsp;&nbsp;&nbsp;  `nfl-data-analysis-326404.NFL_Stats_Fantasy.Recieving` AS Recieve  
+  
+ON
+
+&nbsp;&nbsp;&nbsp;&nbsp;  Rush.Player_Id= Recieve.Player_Id  
+  
+WHERE  
+
+ &nbsp;&nbsp;&nbsp;&nbsp; Fantasy_Rushing_Points>0 
+  AND Fantasy_Standard_Reciving_Total>0  
+  
+ORDER BY
+
+  &nbsp;&nbsp;&nbsp;&nbsp;Total_PPR DESC
+
+<br/>
+
+Data sets after Big Query: 
+
+Standard: https://drive.google.com/file/d/1bsB9lJVRS1t2uU-VDdAYwXCCgXHZQSt8/view?usp=sharing     
+
+PPR: https://drive.google.com/file/d/1_CLDFjKBUyKmOdUMBjdVZwneHKRDqaDo/view?usp=sharing 
+
+  
+Lastly I imported the 2 data sets from SQL(Big Query) to R where I added a column called position which would allow me to see which player's are receivers(wr) and which are running backs(rb). Then I filtered the data so that there was one table for each year from 2015-2020 for both data sets(PPR and Standard). I also removed any remaing duplicates from the data. 
+
+<br/>
+--
+
+# Data Visulization / Summary  
+
+## 2015  
+
+### Data Summary  
+
+```{r,echo=FALSE}
+##Filtering for Year 2015
+Standard_fullCleaned_2015 <- filter(Standard_fullClean, Year=="2015") 
+Standard_fullClean_2015 <-  mutate(Standard_fullCleaned_2015, Position = ifelse(Receiving_Yards>Rushing_Yards,"wr","rb"))
+summary(Standard_fullClean_2015)
+```  
+
+### Visuals
+
+### Standard Scoring  
+
+
+```{r, fig.width=7, fig.height=7, out.width="100%", echo=FALSE, results='asis'}
+ggplot(data = Standard_fullClean_2015, mapping = aes(x=Rushing_Yards+Receiving_Yards, y=Total_Standard, color=Position))+
+  geom_point()+
+  geom_smooth(method = "lm", se= FALSE, formula = y~x)+
+  labs(
+    title = "Standard Scoring Points Distribution 2015",
+    subtitle = "WR vs RB",
+    y= "Points",
+    x=" Total Yards"
+  )
+```
+```{r, echo=FALSE}
+cs1_2015<- cor(Standard_fullClean_2015$Total_Standard, Standard_fullClean_2015$Rushing_Yards)
+cs2_2015<- cor(Standard_fullClean_2015$Total_Standard, Standard_fullClean_2015$Receiving_Yards)
+cs3_2015<-cor(Standard_fullClean_2015$Total_Standard, Standard_fullClean_2015$Rushing_TD)
+cs4_2015<-cor(Standard_fullClean_2015$Total_Standard, Standard_fullClean_2015$Recieving_TD)
+
+print(paste("The correlation between rushing yards and points scored",cs1_2015))  
+print(paste("The correlation between receiving yards and points scored",cs2_2015))  
+print(paste("The correlation between ruching touchdowns and points scored",cs3_2015))  
+print(paste("The correlation between receiving touchdowns and points scored",cs4_2015))  
+```
+&nbsp;
+
+
+### PPR Scoring
+```{r, fig.width=7, fig.height=7, out.width="100%",echo=FALSE}
+PPR_fullCleaned_2015 <- filter(PPR_fullClean, Year=="2015") 
+PPR_fullClean_2015<-  mutate(PPR_fullCleaned_2015, Position = ifelse(Receiving_Yards>Rushing_Yards,"wr","rb"))
+
+
+## Graphs of 2015 Data
+ggplot(data = PPR_fullClean_2015, mapping = aes(x=Rushing_Yards+Receiving_Yards, y=Total_PPR, color=Position))+
+  geom_point()+
+  geom_smooth(method = "lm", se= FALSE, formula = y~x)+
+  labs(
+    title = "PPR Scoring Points Distribution 2015",
+    subtitle = "WR vs RB",
+    y= "Points",
+    x=" Total Yards"
+  )
+```
+
+
+
+```{r, echo=FALSE}
+cp1_2015<- cor(PPR_fullClean_2015$Total_PPR, PPR_fullClean_2015$Rushing_Yards)
+cp2_2015<-cor(PPR_fullClean_2015$Total_PPR, PPR_fullClean_2015$Receiving_Yards)
+cp3_2015<-cor(PPR_fullClean_2015$Total_PPR, PPR_fullClean_2015$Rushing_TD)
+cp4_2015<-cor(PPR_fullClean_2015$Total_PPR, PPR_fullClean_2015$Recieving_TD)
+
+print(paste("The correlation between rushing yards and points scored",cp1_2015))  
+print(paste("The correlation between receiving yards and points scored",cp2_2015))  
+print(paste("The correlation between rushing touchdowns and points scored",cp3_2015))  
+print(paste("The correlation between receiving touchdowns and points scored",cp4_2015))
+```
+
+</br>
+
+## 2016    
+
+### Summary    
+
+
+```{r, echo=FALSE}
+
+Standard_fullCleaned_2016 <- filter(Standard_fullClean, Year=="2016")  
+Standard_fullClean_2016<-  mutate(Standard_fullCleaned_2016, Position = ifelse(Receiving_Yards>Rushing_Yards,"wr","rb"))
+summary(Standard_fullClean_2016)
+```
+
+### Visuals
+
+### Standard Scoring
+
+
+```{r ,fig.width=7, fig.height=7, out.width="100%", echo=FALSE}
+
+
+## Graphs of 2016 Data
+ggplot(data = Standard_fullClean_2016, mapping = aes(x=Rushing_Yards+Receiving_Yards, y=Total_Standard, color=Position))+
+  geom_point()+
+  geom_smooth(method = "lm", se= FALSE, formula = y~x)+
+  labs(
+    title = "Standard Scoring Points Distribution 2016",
+    subtitle = "WR vs RB",
+    y= "Points",
+    x=" Total Yards"
+  )
+## 2016 Points to Scoring Stats correlation
+cs1_2016<-cor(Standard_fullClean_2016$Total_Standard, Standard_fullClean_2016$Rushing_Yards)
+cs2_2016<-cor(Standard_fullClean_2016$Total_Standard, Standard_fullClean_2016$Receiving_Yards)
+cs3_2016<-cor(Standard_fullClean_2016$Total_Standard, Standard_fullClean_2016$Rushing_TD)
+cs4_2016<-cor(Standard_fullClean_2016$Total_Standard, Standard_fullClean_2016$Recieving_TD)
+
+print(paste("The correlation between rushing yards and points scored",cs1_2016))  
+print(paste("The correlation between receiving yards and points scored",cs2_2016))  
+print(paste("The correlation between ruching touchdowns and points scored",cs3_2016))  
+print(paste("The correlation between receiving touchdowns and points scored",cs4_2016))  
+
+```
+
+</br>
+
+### PPR Scoring  
+
+```{r,fig.width=7, fig.height=7, out.width="100%", echo=FALSE}
+##Filtering for Year 2016
+PPR_fullCleaned_2016 <- filter(PPR_fullClean, Year=="2016")
+PPR_fullClean_2016<-  mutate(PPR_fullCleaned_2016, Position = ifelse(Receiving_Yards>Rushing_Yards,"wr","rb"))
+
+
+## Graphs of 2016 Data
+ggplot(data = PPR_fullClean_2016, mapping = aes(x=Rushing_Yards+Receiving_Yards, y=Total_PPR, color=Position))+
+  geom_point()+
+  geom_smooth(method = "lm", se= FALSE, formula = y~x)+
+  labs(
+    title = "PPR Scoring Points Distribution 2016",
+    subtitle = "WR vs RB",
+    y= "Points",
+    x=" Total Yards"
+  )
+## 2016 Points to Scoring Stats correlation
+cp1_2016<-cor(PPR_fullClean_2016$Total_PPR, PPR_fullClean_2016$Rushing_Yards)
+cp2_2016<-cor(PPR_fullClean_2016$Total_PPR, PPR_fullClean_2016$Receiving_Yards)
+cp3_2016<-cor(PPR_fullClean_2016$Total_PPR, PPR_fullClean_2016$Rushing_TD)
+cp4_2016<-cor(PPR_fullClean_2016$Total_PPR, PPR_fullClean_2016$Recieving_TD)
+
+print(paste("The correlation between rushing yards and points scored",cp1_2016))  
+print(paste("The correlation between receiving yards and points scored",cp2_2016))  
+print(paste("The correlation between ruching touchdowns and points scored",cp3_2016))  
+print(paste("The correlation between receiving touchdowns and points scored",cp4_2016))  
+
+```
+
+</br>
+
+## 2017 
+
+### Summary  
+
+
+```{r, echo=FALSE}
+
+Standard_fullCleaned_2017 <- filter(Standard_fullClean, Year=="2017") 
+Standard_fullClean_2017<-  mutate(Standard_fullCleaned_2017, Position = ifelse(Receiving_Yards>Rushing_Yards,"wr","rb"))
+summary(Standard_fullClean_2017)
+```
+ 
+### Standard Scoring  
+
+
+```{r,fig.width=7, fig.height=7, out.width="100%", echo=FALSE}
+
+## Graphs of 2017 Data
+ggplot(data = Standard_fullClean_2017, mapping = aes(x=Rushing_Yards+Receiving_Yards, y=Total_Standard, color=Position))+
+  geom_point()+
+  geom_smooth(method = "lm", se= FALSE, formula = y~x)+
+  labs(
+    title = "Standard Scoring Points Distribution 2017",
+    subtitle = "WR vs RB",
+    y= "Points",
+    x=" Total Yards"
+  )
+## 2017 Points to Scoring Stats correlation
+cs1_2017<-cor(Standard_fullClean_2017$Total_Standard, Standard_fullClean_2017$Rushing_Yards)
+cs2_2017<-cor(Standard_fullClean_2017$Total_Standard, Standard_fullClean_2017$Receiving_Yards)
+cs3_2017<-cor(Standard_fullClean_2017$Total_Standard, Standard_fullClean_2017$Rushing_TD)
+cs4_2017<-cor(Standard_fullClean_2017$Total_Standard, Standard_fullClean_2017$Recieving_TD)
+
+print(paste("The correlation between rushing yards and points scored",cs1_2017))  
+print(paste("The correlation between receiving yards and points scored",cs2_2017))  
+print(paste("The correlation between ruching touchdowns and points scored",cs3_2017))  
+print(paste("The correlation between receiving touchdowns and points scored",cs4_2017))  
+
+```
+
+</br>
+
+### PPR Scoring
+
+```{r,fig.width=7, fig.height=7, out.width="100%", echo=FALSE}
+##Filtering for Year 2017
+PPR_fullCleaned_2017 <- filter(PPR_fullClean, Year=="2017") 
+PPR_fullClean_2017 <- mutate(PPR_fullCleaned_2017, Position = ifelse(Receiving_Yards>Rushing_Yards,"wr","rb"))
+
+## Graphs of 2017 Data
+ggplot(data = PPR_fullClean_2017, mapping = aes(x=Rushing_Yards+Receiving_Yards, y=Total_PPR, color=Position))+
+  geom_point()+
+  geom_smooth(method = "lm", se= FALSE, formula = y~x)+
+  labs(
+    title = "PPR Scoring Points Distribution 2017",
+    subtitle = "WR vs RB",
+    y= "Points",
+    x=" Total Yards"
+  )
+## 2017 Points to Scoring Stats correlation
+cp1_2017<-cor(PPR_fullClean_2017$Total_PPR, PPR_fullClean_2017$Rushing_Yards)
+cp2_2017<-cor(PPR_fullClean_2017$Total_PPR, PPR_fullClean_2017$Receiving_Yards)
+cp3_2017<-cor(PPR_fullClean_2017$Total_PPR, PPR_fullClean_2017$Rushing_TD)
+cp4_2017<-cor(PPR_fullClean_2017$Total_PPR, PPR_fullClean_2017$Recieving_TD)
+
+print(paste("The correlation between rushing yards and points scored",cp1_2017))  
+print(paste("The correlation between receiving yards and points scored",cp2_2017))  
+print(paste("The correlation between ruching touchdowns and points scored",cp3_2017))  
+print(paste("The correlation between receiving touchdowns and points scored",cp4_2017))
+```
+
+</br>
+
+## 2018 
+
+### Summary  
+
+
+```{r, echo=FALSE}
+
+##Filtering for Year 2018
+Standard_fullCleaned_2018 <- filter(Standard_fullClean, Year=="2018")  
+Standard_fullClean_2018<-  mutate(Standard_fullCleaned_2018, Position = ifelse(Receiving_Yards>Rushing_Yards,"wr","rb"))
+summary(Standard_fullClean_2018)
+```
+
+### Standard Scoring  
+
+
+```{r,fig.width=7, fig.height=7, out.width="100%", echo=FALSE}
+
+## Graphs of 2018 Data
+ggplot(data = Standard_fullClean_2018, mapping = aes(x=Rushing_Yards+Receiving_Yards, y=Total_Standard, color=Position))+
+  geom_point()+
+  geom_smooth(method = "lm", se= FALSE, formula = y~x)+
+  labs(
+    title = "Standard Scoring Points Distribution 2018",
+    subtitle = "WR vs RB",
+    y= "Points",
+    x=" Total Yards"
+  )
+## 2018 Points to Scoring Stats correlation
+cs1_2018<-cor(Standard_fullClean_2018$Total_Standard, Standard_fullClean_2018$Rushing_Yards)
+cs2_2018<-cor(Standard_fullClean_2018$Total_Standard, Standard_fullClean_2018$Receiving_Yards)
+cs3_2018<-cor(Standard_fullClean_2018$Total_Standard, Standard_fullClean_2018$Rushing_TD)
+cs4_2018<-cor(Standard_fullClean_2018$Total_Standard, Standard_fullClean_2018$Recieving_TD)
+
+print(paste("The correlation between rushing yards and points scored",cs1_2018))  
+print(paste("The correlation between receiving yards and points scored",cs2_2018))  
+print(paste("The correlation between ruching touchdowns and points scored",cs3_2018))  
+print(paste("The correlation between receiving touchdowns and points scored",cs4_2018)) 
+
+``` 
+
+### PPR Scoring  
+
+
+```{r,fig.width=7, fig.height=7, out.width="100%", echo=FALSE}
+
+##Filtering for Year 2018
+PPR_fullCleaned_2018 <- filter(PPR_fullClean, Year=="2018") 
+PPR_fullClean_2018<-  mutate(PPR_fullCleaned_2018, Position = ifelse(Receiving_Yards>Rushing_Yards,"wr","rb"))
+
+
+
+## Graphs of 2018 Data
+ggplot(data = PPR_fullClean_2018, mapping = aes(x=Rushing_Yards+Receiving_Yards, y=Total_PPR, color=Position))+
+  geom_point()+
+  geom_smooth(method = "lm", se= FALSE, formula = y~x)+
+  labs(
+    title = "PPR Scoring Points Distribution 2018",
+    subtitle = "WR vs RB",
+    y= "Points",
+    x=" Total Yards"
+  )
+## 2018 Points to Scoring Stats correlation
+cp1_2018<-cor(PPR_fullClean_2018$Total_PPR, PPR_fullClean_2018$Rushing_Yards)
+cp2_2018<-cor(PPR_fullClean_2018$Total_PPR, PPR_fullClean_2018$Receiving_Yards)
+cp3_2018<-cor(PPR_fullClean_2018$Total_PPR, PPR_fullClean_2018$Rushing_TD)
+cp4_2018<-cor(PPR_fullClean_2018$Total_PPR, PPR_fullClean_2018$Recieving_TD)
+
+
+print(paste("The correlation between rushing yards and points scored",cp1_2018))  
+print(paste("The correlation between receiving yards and points scored",cp2_2018))  
+print(paste("The correlation between ruching touchdowns and points scored",cp3_2018))  
+print(paste("The correlation between receiving touchdowns and points scored",cp4_2018))
+```
+  
+
+</br>
+
+## 2019
+
+### Summary  
+
+
+```{r, echo=FALSE}
+##Filtering for Year 2019
+Standard_fullCleaned_2019 <- filter(Standard_fullClean, Year=="2019") 
+Standard_fullClean_2019<-  mutate(Standard_fullCleaned_2019, Position = ifelse(Receiving_Yards>Rushing_Yards,"wr","rb"))
+summary(Standard_fullClean_2019)
+```  
+   
+   
+### Standard Scoring  
+
+
+```{r,fig.width=7, fig.height=7, out.width="100%", echo=FALSE}
+
+## Graphs of 2019 Data
+ggplot(data = Standard_fullClean_2019, mapping = aes(x=Rushing_Yards+Receiving_Yards, y=Total_Standard, color=Position))+
+  geom_point()+
+  geom_smooth(method = "lm", se= FALSE, formula = y~x)+
+  labs(
+    title = "Standard Scoring Points Distribution 2019",
+    subtitle = "WR vs RB",
+    y= "Points",
+    x=" Total Yards"
+  )
+## 2019 Points to Scoring Stats correlation
+cs1_2019<-cor(Standard_fullClean_2019$Total_Standard, Standard_fullClean_2019$Rushing_Yards)
+cs2_2019<-cor(Standard_fullClean_2019$Total_Standard, Standard_fullClean_2019$Receiving_Yards)
+cs3_2019<-cor(Standard_fullClean_2019$Total_Standard, Standard_fullClean_2019$Rushing_TD)
+cs4_2019<-cor(Standard_fullClean_2019$Total_Standard, Standard_fullClean_2019$Recieving_TD)
+
+print(paste("The correlation between rushing yards and points scored",cs1_2019))  
+print(paste("The correlation between receiving yards and points scored",cs2_2019))  
+print(paste("The correlation between ruching touchdowns and points scored",cs3_2019))  
+print(paste("The correlation between receiving touchdowns and points scored",cs4_2019)) 
+
+``` 
+
+### PPR Scoring  
+
+
+```{r,fig.width=7, fig.height=7, out.width="100%", echo=FALSE}
+
+##Filtering for Year 2019
+PPR_fullCleaned_2019 <- filter(PPR_fullClean, Year=="2019") 
+PPR_fullClean_2019<-  mutate(PPR_fullCleaned_2019, Position = ifelse(Receiving_Yards>Rushing_Yards,"wr","rb"))
+
+
+## Graphs of 2019 Data
+ggplot(data = PPR_fullClean_2019, mapping = aes(x=Rushing_Yards+Receiving_Yards, y=Total_PPR, color=Position))+
+  geom_point()+
+  geom_smooth(method = "lm", se= FALSE, formula = y~x)+
+  labs(
+    title = "PPR Scoring Points Distribution 2019",
+    subtitle = "WR vs RB",
+    y= "Points",
+    x=" Total Yards"
+  )
+## 2019 Points to Scoring Stats correlation
+cp1_2019<-cor(PPR_fullClean_2019$Total_PPR, PPR_fullClean_2019$Rushing_Yards)
+cp2_2019<-cor(PPR_fullClean_2019$Total_PPR, PPR_fullClean_2019$Receiving_Yards)
+cp3_2019<-cor(PPR_fullClean_2019$Total_PPR, PPR_fullClean_2019$Rushing_TD)
+cp4_2019<-cor(PPR_fullClean_2019$Total_PPR, PPR_fullClean_2019$Recieving_TD)
+
+
+print(paste("The correlation between rushing yards and points scored",cp1_2019))  
+print(paste("The correlation between receiving yards and points scored",cp2_2019))  
+print(paste("The correlation between ruching touchdowns and points scored",cp3_2019))  
+print(paste("The correlation between receiving touchdowns and points scored",cp4_2019))
+```
+
+
+</br>
+
+## 2020
+
+### Summary  
+
+
+```{r, echo=FALSE}
+##Filtering for Year 2020
+Standard_fullCleaned_2020 <- filter(Standard_fullClean, Year=="2020") 
+Standard_fullClean_2020<-  mutate(Standard_fullCleaned_2020, Position = ifelse(Receiving_Yards>Rushing_Yards,"wr","rb"))
+summary(Standard_fullClean_2020)
+```  
+   
+   
+### Standard Scoring  
+
+
+```{r,fig.width=7, fig.height=7, out.width="100%", echo=FALSE}
+
+## Graphs of 2020 Data
+ggplot(data = Standard_fullClean_2020, mapping = aes(x=Rushing_Yards+Receiving_Yards, y=Total_Standard, color=Position))+
+  geom_point()+
+  geom_smooth(method = "lm", se= FALSE, formula = y~x)+
+  labs(
+    title = "Standard Scoring Points Distribution 2020",
+    subtitle = "WR vs RB",
+    y= "Points",
+    x=" Total Yards"
+  )
+## 2020 Points to Scoring Stats correlation
+cs1_2020<-cor(Standard_fullClean_2020$Total_Standard, Standard_fullClean_2020$Rushing_Yards)
+cs2_2020<-cor(Standard_fullClean_2020$Total_Standard, Standard_fullClean_2020$Receiving_Yards)
+cs3_2020<-cor(Standard_fullClean_2020$Total_Standard, Standard_fullClean_2020$Rushing_TD)
+cs4_2020<-cor(Standard_fullClean_2020$Total_Standard, Standard_fullClean_2020$Recieving_TD)
+
+print(paste("The correlation between rushing yards and points scored",cs1_2020))  
+print(paste("The correlation between receiving yards and points scored",cs2_2020))  
+print(paste("The correlation between ruching touchdowns and points scored",cs3_2020))  
+print(paste("The correlation between receiving touchdowns and points scored",cs4_2020)) 
+
+``` 
+
+### PPR Scoring  
+
+
+```{r,fig.width=7, fig.height=7, out.width="100%", echo=FALSE}
+
+
+##Filtering for Year 2020
+PPR_fullCleaned_2020 <- filter(PPR_fullClean, Year=="2020") 
+PPR_fullClean_2020 <- mutate(PPR_fullCleaned_2020, Position = ifelse(Receiving_Yards>Rushing_Yards,"wr","rb"))
+
+
+## Graphs of 2020 Data
+ggplot(data = PPR_fullClean_2020, mapping = aes(x=Rushing_Yards+Receiving_Yards, y=Total_PPR, color=Position))+
+  geom_point()+
+  geom_smooth(method = "lm", se= FALSE, formula = y~x)+
+  labs(
+    title = "PPR Scoring Points Distribution 2020",
+    subtitle = "WR vs RB",
+    y= "Points",
+    x=" Total Yards"
+  )
+## 2020 Points to Scoring Stats correlation
+cp1_2020<-cor(PPR_fullClean_2020$Total_PPR, PPR_fullClean_2020$Rushing_Yards)
+cp2_2020<-cor(PPR_fullClean_2020$Total_PPR, PPR_fullClean_2020$Receiving_Yards)
+cp3_2020<-cor(PPR_fullClean_2020$Total_PPR, PPR_fullClean_2020$Rushing_TD)
+cp4_2020<-cor(PPR_fullClean_2020$Total_PPR, PPR_fullClean_2020$Recieving_TD)
+
+
+print(paste("The correlation between rushing yards and points scored",cp1_2020))  
+print(paste("The correlation between receiving yards and points scored",cp2_2020))  
+print(paste("The correlation between ruching touchdowns and points scored",cp3_2020))  
+print(paste("The correlation between receiving touchdowns and points scored",cp4_2020))
+```  
+
+<br/>
+  
+# Analysis
+
+
+
+### Standard Scoring:
+
+##### Key Data
+```{r, echo=FALSE}
+rb_2015<- filter(Standard_fullClean_2015,Position=="rb")
+wr_2015<- filter(Standard_fullClean_2015,Position=="wr")
+rbm_2015<- pull(rb_2015,Total_Standard)
+wbm_2015<- pull(wr_2015,Total_Standard)
+
+rb_2020<- filter(Standard_fullClean_2020,Position=="rb")
+wr_2020<- filter(Standard_fullClean_2020,Position=="wr")
+rbm_2020<- pull(rb_2020,Total_Standard)
+wbm_2020<- pull(wr_2020,Total_Standard)
+
+#DATA
+print(paste("The mean of the points in 2015 scored for by WR",mean(wbm_2015)))
+print(paste("The mean of the points in 2015 scored for by RB",mean(rbm_2015)))
+print(paste("The standard deviation in 2015 scored for the WR",sd(wbm_2015)))
+print(paste("The standard deviation in 2015 for the RB",sd(rbm_2015)))
+
+print(paste("The mean of the points in 2020 scored for by WR",mean(wbm_2020)))
+print(paste("The mean of the points in 2020 scored for by RB",mean(rbm_2020)))
+print(paste("The standard deviation in 2020 scored for the WR",sd(wbm_2020)))
+print(paste("The standard deviation in 2020 for the RB",sd(rbm_2020)))
+
+
+```
+
+In the all the Standard Scoring graphs and  data summaries it is clear that the points the running back scores(rb) consistently outpaces the points scored by wide receivers (wr). For example, in the 2018 Standard Scoring data set/ visual there are 8 running backs who scored more than the top scoring wide receiver. In 2019 there are 15 running backs who out score the top scoring receiver. In fact the year with the lowest difference (2015) has 3 rbs that out scored the top wr. The correlation stats for all the Standard scoring data tables also seem to support this idea as the rushing stats (yards and tds) have higher correlation coefficients than receiving stats. The running backs also had a higher mean value meaning the average running back was scored more than the average receiver. Also in the normal distribution graphs below the receiver bell curve is is more left shifted and more concentrated than the running back curve which is more symmetrical and centered. This shows that there were higher frequency of running backs than receivers from 300 points to the intersection point of each normal  distribution graph. In other word there are more quality running backs than receivers.
+
+```{r,fig.width=7, fig.height=6, out.width="100%", echo=FALSE}
+# Histogram Top 40
+top_Standard_2015<-slice(Standard_fullClean_2015,1:40)
+ggplot(data=top_Standard_2015)+
+  geom_histogram(mapping=aes(x=Total_Standard, fill=Position),binwidth = 20 )+
+  ggtitle("2015 Top 40 Highest Scoring")
+
+top_Standard_2018<-slice(Standard_fullClean_2018,1:40)
+ggplot(data=top_Standard_2018)+
+  geom_histogram(mapping=aes(x=Total_Standard, fill=Position),binwidth = 20 )+
+  ggtitle("2018 Top 40 Highest Scoring")
+
+top_Standard_2020<-slice(Standard_fullClean_2020,1:40)
+ggplot(data=top_Standard_2020)+
+  geom_histogram(mapping=aes(x=Total_Standard, fill=Position),binwidth = 20 )+
+  ggtitle("2020 Top 40 Highest Scoring")
+
+# Normal Distribution
+
+plot.function(x = function(t) dnorm(x = t,mean =mean(wbm_2015) , sd =sd(wbm_2015) ),
+              from = 0,
+              to = 300,
+              col = "red",
+              xlab = "Points",
+              ylab = "Densities",
+              main = "2015 RB vs WR Normal Distribution")
+plot.function(x = function(t) dnorm(x = t, mean = mean(rbm_2015), sd = sd(rbm_2015) ),
+              from = 0,
+              to = 300,
+              col = "blue",
+              add = TRUE)
+legend(x = "topright",
+       legend = c("WR", "RB"),
+       col = c("red", "blue"),
+       lty = 1)
+
+
+
+plot.function(x = function(t) dnorm(x = t,mean =mean(wbm_2020) , sd =sd(wbm_2020) ),
+              from = 0,
+              to = 300,
+              col = "red",
+              xlab = "Points",
+              ylab = "Densities",
+              main = "2020 RB vs WR Normal Distribution")
+plot.function(x = function(t) dnorm(x = t, mean = mean(rbm_2020), sd = sd(rbm_2020) ),
+              from = 0,
+              to = 300,
+              col = "blue",
+              add = TRUE)
+legend(x = "topright",
+       legend = c("WR", "RB"),
+       col = c("red", "blue"),
+       lty = 1)
+
+```
+<br/>
+
+### PPR Scoring:  
+#### Key Data
+
+```{r,echo=FALSE}
+
+rb_PPR_2020<- filter(Standard_fullClean_2015,Position=="rb")
+wr_PPR_2015<- filter(Standard_fullClean_2015,Position=="wr")
+rbp_2015<- pull(rb_2015,Total_PPR)
+wbp_2015<- pull(wr_2015,Total_PPR)
+
+rb_PPR_2020<- filter(Standard_fullClean_2020,Position=="rb")
+wr_PPR_2020<- filter(Standard_fullClean_2020,Position=="wr")
+rbp_2020<- pull(rb_2020,Total_PPR)
+wbp_2020<- pull(wr_2020,Total_PPR)
+
+#DATA
+print(paste("The mean of the points in 2015 scored for by WR",mean(wbp_2015)))
+print(paste("The mean of the points in 2015 scored for by RB",mean(rbp_2015)))
+print(paste("The standard deviation in 2015 scored for the WR",sd(wbp_2015)))
+print(paste("The standard deviation in 2015 for the RB",sd(rbp_2015)))
+
+print(paste("The mean of the points in 2020 scored for by WR",mean(wbp_2020)))
+print(paste("The mean of the points in 2020 scored for by RB",mean(rbp_2020)))
+print(paste("The standard deviation in 2020 scored for the WR",sd(wbp_2020)))
+print(paste("The standard deviation in 2020 for the RB",sd(rbp_2020)))
+```
+
+The difference between PPR and Standard scoring is that in PPR each reception is 1 extra point. This difference in scoring boosts points and efficiency for both positions but is especially evident in the receivers. This is shown as in correlation coefficient as receiving yards now has a correlation coefficient of about 0.7 throughout the data sets from 2015-2020. Even with this the top receivers are still being outscored by the top rb's in all the data sets except in 2015. This anomaly in data is attributed to Antonio Brown who in 2015 broke records and was considered one of the best statistical years for a receiver ever. In all the other data sets there are about four rbs that outscore the top receiver. The mean of the points scored for the running backs is greater than the receivers in PPR leagues too. This mean that the average running back is out scoring the average receiver. In the normal distribution graphs below it is shown that the receiver curve is slightly more left shifted than running back curve. The receiver curve is also more concentrated while the running back curve is more spread out. This means that there are a higher frequency of running backs from 400 points to the point of intersection on the normal distribution graphs.In other words there are more quality running backs than receivers. In the end PPR leagues just close the distance between running backs and receivers, but the running backs still are the better position to draft.
+
+```{r,fig.width=7, fig.height=6, out.width="100%", echo=FALSE}
+## Histogram PPR
+top_PPR_2015<-slice(PPR_fullClean_2015,1:40)
+ggplot(data=top_PPR_2015)+
+  geom_histogram(mapping=aes(x=Total_Standard, fill=Position),binwidth = 20 )+
+  ggtitle("2015 Top 40 Highest Scoring")
+
+top_PPR_2018<-slice(PPR_fullClean_2018,1:40)
+ggplot(data=top_PPR_2018)+
+  geom_histogram(mapping=aes(x=Total_Standard, fill=Position),binwidth = 20 )+
+  ggtitle("2018 Top 40 Highest Scoring")
+
+top_PPR_2020<-slice(PPR_fullClean_2020,1:40)
+ggplot(data=top_PPR_2020)+
+  geom_histogram(mapping=aes(x=Total_Standard, fill=Position),binwidth = 20 )+
+  ggtitle("2020 Top 40 Highest Scoring")
+
+
+## Normal Distribution PPR
+plot.function(x = function(t) dnorm(x = t,mean =mean(wbp_2015) , sd =sd(wbp_2015) ),
+              from = 0,
+              to = 400,
+              col = "red",
+              xlab = "Points",
+              ylab = "Densities",
+              main = "2015 RB vs WR Normal Distribution")
+plot.function(x = function(t) dnorm(x = t, mean = mean(rbp_2015), sd = sd(rbp_2015) ),
+              from = 0,
+              to = 400,
+              col = "blue",
+              add = TRUE)
+legend(x = "topright",
+       legend = c("WR", "RB"),
+       col = c("red", "blue"),
+       lty = 1)
+
+
+
+plot.function(x = function(t) dnorm(x = t,mean =mean(wbp_2020) , sd =sd(wbp_2020) ),
+              from = 0,
+              to = 400,
+              col = "red",
+              xlab = "Points",
+              ylab = "Densities",
+              main = "2020 RB vs WR Normal Distribution")
+plot.function(x = function(t) dnorm(x = t, mean = mean(rbp_2020), sd = sd(rbp_2020) ),
+              from = 0,
+              to = 400,
+              col = "blue",
+              add = TRUE)
+legend(x = "topright",
+       legend = c("WR", "RB"),
+       col = c("red", "blue"),
+       lty = 1)
+
+```
+
+# Conclusion
+
+The reason that running backs are consistently out scoring receivers can probably be attributed to the fact that there is only 1-2 running backs per team that play in a game while there are as many as 5-6 receiver per team that play in a game. This even offsets the fact that it is easier to gain receiving yards than rushing yards, which is surprising.in the end it can be quite confidentially concluded that player should draft running backs over receivers in the early rounds. In standard scoring leagues there is no discussion it is probably better to draft the 8th best running back over the top rated receiver. While in PPR leagues it is a little closer with the 3rd or 4th running back being better than the top rated receiver. The analysis also shows that unless your a late first round pick you should almost always use your first pick to get a running back. In fact a general rule that can be applied is that for every 9 running backs drafted draft 1 receiver in Standard scoring leagues (equation: 9(RB)=WR). In PPR scoring leagues for every 3 running backs draft 1 receiver (equation: 3(RB)=WR). The limitations of this analysis is that it can only really be applied to the early round draft picks(Rounds 1-2 or depending on the league size Rounds 3). These limitation are caused by the fact the analysis only took into account 2 positions when there are 6 in total. 
+
+## Future
+In the future I plan on making machine learning models that will project the number of points a player will score based on their previous years. This allow for a person to draft a player with confidence instead of worrying if a player was just a one hit wonder. I will also do analysis to take into account all 6 positions and see which round to draft what.
+
