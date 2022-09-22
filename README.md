@@ -5,7 +5,6 @@ In fantasy-football the most important picks are in the early rounds and the dec
 
 
 Key Steps:
-
 Data downloaded from Kaggle
 Cleaned, organized, and transformed the data using spreadsheets and SQL.
 Analyzed data using R and drew conclusions on data to answer my question 
